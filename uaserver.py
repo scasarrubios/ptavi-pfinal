@@ -36,12 +36,48 @@ class XmlHandler(ContentHandler):
     def get_tags(self):
         return self.tags
 
+class SIPServerHandler(socketserver.DatagramRequestHandler):
+
+    def handle(self):
+        line = self.rfile.read().decode('utf-8').split()
+        my_methods = ['INVITE', 'ACK', 'BYE']
+        if line[0] not in my_methods:
+            self.wfile.write(b'SIP/2.0 405 Method Not Allowed\r\n\r\n')
+        elif len(line) != 3:
+            self.wfile.write(b'SIP/2.0 400 Bad Request\r\n\r\n')
+        else:
+            if line[0] == 'INVITE':
+                templateSIP = ('SIP/2.0 100 Trying\r\n\r\n'
+                            'SIP/2.0 180 Ring\r\n\r\n'
+                            'SIP/2.0 200 OK\r\n\r\n')
+                self.wfile.write(bytes(templateSIP, 'utf-8'))
+                templateSDP = ("Content-Type: application/sdp\r\n\r\n" +
+                          "v=0\r\n" + "o=" + str(config_data['account']['username']) + 
+                          " " + str(config_data['uaserver']['ip']) + "\r\ns=LaMesa\r\n" +
+                          "t=0\r\nm=audio " + str(config_data['rtpaudio']['puerto']) +
+                          " RTP\r\n")
+                self.wfile.write(bytes(templateSDP, 'utf-8'))
+            elif line[0] == 'ACK':
+                #os.system('./mp32rtp -i 127.0.0.1 -p 23032 < ' +
+                 #         archivo_audio)
+            elif line[0] == 'BYE':
+                self.wfile.write(b'SIP/2.0 200 OK\r\n\r\n')
+
 if __name__ == "__main__":
    
+    try:
+        CONFIG = sys.argv[1]
+    except:
+        sys.exit("Usage: python3 uaserver.py config")
+
     parser = make_parser()
     xHandler = XmlHandler()
     parser.setContentHandler(xHandler)
-    parser.parse(open('ua1.xml'))
+    parser.parse(open(CONFIG))
     config_data = xHandler.get_tags()
-    print(config_data['account']['username'])
-    
+    serv = socketserver.UDPServer(('', int(config_data['uaserver']['puerto'])), SIPServerHandler)
+    print("Listening...\n")
+    try:
+        serv.serve_forever()
+    except KeyboardInterrupt:
+        print("\nFinalizado servidor")
