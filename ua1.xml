@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config>
+    <account username="jax@redwood.org"  passwd="sons" />
+    <uaserver ip="127.0.0.1" puerto="1234" />  
+    <rtpaudio puerto="7777" /> 
+    <regproxy ip="127.0.0.1" puerto="5555" />
+    <log path="/ptavi/ptavi-pfinal/logs" />
+    <audio path="/ptavi/ptavi-pfinal/cancion.mp3" />
+</config>

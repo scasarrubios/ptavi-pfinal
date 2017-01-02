@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config>
+  <server   name="SonsOfAnarchyProxyServer"
+            ip="127.0.0.1"
+            puerto="5555"/>
+  <database path="/home/scasarrubios/ptavi/ptavi-pfinal/registered.json"
+            passwdpath="/home/scasarrubios/ptavi/ptavi-pfinal/passwords"/>
+  <log      path="/home/scasarrubios/ptavi/ptavi-pfinal/log_pr.txt"/>
+</config>
