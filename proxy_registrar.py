@@ -107,7 +107,8 @@ class ProxyHandler(socketserver.DatagramRequestHandler):
 
     def handle(self):
         self.json2register()
-        line = self.rfile.read().decode('utf-8').split()
+        literal = self.rfile.read().decode('utf-8')
+        line = literal.split()
         print(line)
         print('PRIMERA')
         print(self.clients)
@@ -139,7 +140,7 @@ class ProxyHandler(socketserver.DatagramRequestHandler):
                 self.register2json()
                 print('SEGUNDA')
                 print(self.clients)
-        elif line[0] == 'INVITE' or line[0] == 'BYE':
+        elif line[0] == 'INVITE':
             self.user.append(line[6][2:])
             self.dest.append(line[1].split(':')[1])
             registered = self.register_check(self.user[0])
@@ -149,7 +150,8 @@ class ProxyHandler(socketserver.DatagramRequestHandler):
                 as my_socket:  # Abrimos un socket con el cliente solicitado
                     my_socket.connect((self.clients[self.dest[0]][0],
                                        int(self.clients[self.dest[0]][1])))
-                    my_socket.send(bytes(' '.join(line), 'utf-8'))
+                    print('LINEAUNIDA:\n', literal)
+                    my_socket.send(bytes(literal, 'utf-8'))
                     answer = my_socket.recv(1024).decode('utf-8')
                     self.wfile.write(bytes(answer, 'utf-8'))
             elif not registered:
@@ -167,6 +169,17 @@ class ProxyHandler(socketserver.DatagramRequestHandler):
                 self.user = []
                 self.dest = []
                 print(self.user, self.dest)
+        elif line[0] == 'BYE':
+            dest = line[1][4:]
+            user_found = self.register_check(dest)
+            if user_found:
+                with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) \
+                as my_socket:  # Abrimos un socket con el cliente solicitado
+                    my_socket.connect((self.clients[dest][0],
+                                       int(self.clients[dest][1])))
+                    my_socket.send(bytes(' '.join(line), 'utf-8'))
+                    answer = my_socket.recv(1024).decode('utf-8')
+                    self.wfile.write(bytes(answer, 'utf-8'))
 if __name__ == "__main__":
     try:
         CONFIG = sys.argv[1]

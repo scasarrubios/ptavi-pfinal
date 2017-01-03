@@ -35,7 +35,7 @@ if __name__ == "__main__":
     if METHOD == 'REGISTER':
         line = METHOD + ' sip:' + str(config_data['account']['username']) + \
             ':' + str(config_data['uaserver']['puerto']) + \
-            ' SIP/2.0 Expires: ' + OPTION
+            ' SIP/2.0\r\n Expires: ' + OPTION
         print("Enviando: " + line)
         my_socket.send(bytes(line, 'utf-8') + b'\r\n\r\n')
         answer = my_socket.recv(1024).decode('utf-8')
@@ -59,6 +59,7 @@ if __name__ == "__main__":
                     "\r\ns=LaMesa\r\n" + "t=0\r\nm=audio " + \
                     str(config_data['rtpaudio']['puerto']) + " RTP\r\n\r\n"
         line = METHOD + ' sip:' + OPTION + ' SIP/2.0\r\n' + templateSDP
+        print('LINEAINVITE:\n', line)
         my_socket.send(bytes(line, 'utf-8'))
         answer = my_socket.recv(1024).decode('utf-8')
         if '200' in answer:
@@ -72,4 +73,5 @@ if __name__ == "__main__":
         line = 'BYE sip:' + OPTION + ' SIP/2.0\r\n'
         my_socket.send(bytes(line, 'utf-8'))
         answer = my_socket.recv(1024).decode('utf-8')
+        print(answer)
     print("Cerrando socket")
