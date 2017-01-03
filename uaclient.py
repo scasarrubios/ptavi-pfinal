@@ -64,4 +64,12 @@ if __name__ == "__main__":
         if '200' in answer:
             line = 'ACK sip:' + OPTION + ' SIP/2.0\r\n'
             my_socket.send(bytes(line, 'utf-8'))
-    print("Fin.")
+            os.system('cvlc rtp://@' + config_data['uaserver']['ip'] +
+                     ':' + config_data['rtpaudio']['puerto'])
+        else:
+            print(answer)
+    elif METHOD == 'BYE':
+        line = 'BYE sip:' + OPTION + ' SIP/2.0\r\n'
+        my_socket.send(bytes(line, 'utf-8'))
+        answer = my_socket.recv(1024).decode('utf-8')
+    print("Cerrando socket")

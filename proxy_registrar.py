@@ -37,23 +37,9 @@ class ProxyXmlHandler(ContentHandler):
         return self.tags
 
 
-def get_psswd(user):
-    try:
-        file = open(str(config_data['database']['passwdpath']), "r")
-        lines = file.readlines()
-        password = ""
-        for line in lines:
-            user_file = line.split()[0].split(":")[0]
-            if user == user_file:
-                password = line.split()[0].split(":")[1]
-    except FileNotFoundError:
-        os.exit('ERROR: passwords file not found')
-    return password
-
-
 class ProxyHandler(socketserver.DatagramRequestHandler):
     """
-    Echo server class
+    Register server class
     """
     clients = {}
     user = []
@@ -74,6 +60,19 @@ class ProxyHandler(socketserver.DatagramRequestHandler):
                 caduced.append(client)
         for client in caduced:
             del self.clients[client]
+    
+    def get_psswd(self, user):
+        try:
+            file = open(str(config_data['database']['passwdpath']), "r")
+            lines = file.readlines()
+            password = ""
+            for line in lines:
+                user_file = line.split()[0].split(":")[0]
+                if user == user_file:
+                    password = line.split()[0].split(":")[1]
+        except FileNotFoundError:
+            os.exit('ERROR: passwords file not found')
+        return password
 
     def register_check(self, user):
         """
@@ -113,6 +112,7 @@ class ProxyHandler(socketserver.DatagramRequestHandler):
         print('PRIMERA')
         print(self.clients)
         self.caducity_check()
+        self.register2json()
         if line[0] == 'REGISTER' and len(line) < 6:  # Si falta autenticación
             to_send = 'SIP/2.0 401 Unauthorized\r\n' + \
                       'WWW Authenticate: Digest nonce="' + \
@@ -121,7 +121,7 @@ class ProxyHandler(socketserver.DatagramRequestHandler):
         elif line[0] == 'REGISTER' and len(line) >= 6:  # Autenticación recibida
             user = line[1].split(':')[1]
             authenticate = hashlib.sha1()
-            authenticate.update(bytes(get_psswd(user), 'utf-8'))
+            authenticate.update(bytes(self.get_psswd(user), 'utf-8'))
             authenticate.update(bytes(self.nonce, 'utf-8'))
             authenticate = authenticate.hexdigest()
             if authenticate == line[7].split('"')[1]:
@@ -139,7 +139,7 @@ class ProxyHandler(socketserver.DatagramRequestHandler):
                 self.register2json()
                 print('SEGUNDA')
                 print(self.clients)
-        elif line[0] == 'INVITE':
+        elif line[0] == 'INVITE' or line[0] == 'BYE':
             self.user.append(line[6][2:])
             self.dest.append(line[1].split(':')[1])
             registered = self.register_check(self.user[0])
@@ -153,9 +153,9 @@ class ProxyHandler(socketserver.DatagramRequestHandler):
                     answer = my_socket.recv(1024).decode('utf-8')
                     self.wfile.write(bytes(answer, 'utf-8'))
             elif not registered:
-                self.wfile.write(bytes('401', 'utf-8'))
+                self.wfile.write(b'SIP/2.0 401 Unauthorized\r\n\r\n')
             elif not user_found:
-                self.wfile.write(bytes('404', 'utf-8'))
+                self.wfile.write(b'SIP/2.0 404 User Not Found\r\n\r\n')
         elif line[0] == 'ACK':
             registered = self.register_check(self.user[0])
             if registered:
@@ -166,6 +166,7 @@ class ProxyHandler(socketserver.DatagramRequestHandler):
                     my_socket.send(bytes(' '.join(line), 'utf-8'))
                 self.user = []
                 self.dest = []
+                print(self.user, self.dest)
 if __name__ == "__main__":
     try:
         CONFIG = sys.argv[1]
