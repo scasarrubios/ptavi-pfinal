@@ -128,11 +128,11 @@ class ProxyHandler(socketserver.DatagramRequestHandler):
         print(line)
         print('PRIMERA')
         print(self.clients)
+        ip = self.client_address[0]
+        port = self.client_address[1]
         self.caducity_check()
         self.register2json()
         if line[0] == 'REGISTER' and len(line) < 6:  # Si falta autenticación
-            ip = self.client_address[0]
-            port = self.client_address[1]
             to_send = 'SIP/2.0 401 Unauthorized\r\n' + \
                       'WWW Authenticate: Digest nonce="' + \
                       self.nonce + '"\r\n\r\n'
@@ -147,8 +147,6 @@ class ProxyHandler(socketserver.DatagramRequestHandler):
             authenticate = authenticate.hexdigest()
             if authenticate == line[7].split('"')[1]:
                 print("PERFE")
-                ip = self.client_address[0]
-                port = self.client_address[1]
                 data = []
                 data.append(self.client_address[0])  # Añade la IP
                 data.append(line[1].split(':')[2])  # Añade el puerto
@@ -158,8 +156,10 @@ class ProxyHandler(socketserver.DatagramRequestHandler):
                     caduc_time = time.localtime(time.time()+int(line[4]))
                     data.append(time.strftime('%Y-%m-%d %H:%M:%S', caduc_time))
                     self.clients[user] = data
-                self.wfile.write(b"SIP/2.0 200 OK\r\n\r\n")
+                to_send = "SIP/2.0 200 OK\r\n\r\n"
+                self.wfile.write(bytes(to_send, 'utf-8'))
                 event2log(literal, ip, port, 'r')
+                event2log(to_send, ip, port, 's')
                 self.register2json()
                 print('SEGUNDA')
                 print(self.clients)
@@ -168,41 +168,68 @@ class ProxyHandler(socketserver.DatagramRequestHandler):
             self.dest.append(line[1].split(':')[1])
             registered = self.register_check(self.user[0])
             user_found = self.register_check(self.dest[0])
+            event2log(literal, ip, port, 'r')
             if registered and user_found:
+                ip_sock = self.clients[self.dest[0]][0]
+                port_sock = int(self.clients[self.dest[0]][1])
                 with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) \
                 as my_socket:  # Abrimos un socket con el cliente solicitado
-                    my_socket.connect((self.clients[self.dest[0]][0],
-                                       int(self.clients[self.dest[0]][1])))
-                    print('LINEAUNIDA:\n', literal)
+                    my_socket.connect((ip_sock, port_sock))
                     my_socket.send(bytes(literal, 'utf-8'))
+                    event2log(literal, ip_sock, port_sock, 's')
                     answer = my_socket.recv(1024).decode('utf-8')
+                    event2log(answer, ip_sock, port_sock, 'r')
                     self.wfile.write(bytes(answer, 'utf-8'))
+                    event2log(answer, ip, port, 's')
             elif not registered:
-                self.wfile.write(b'SIP/2.0 401 Unauthorized\r\n\r\n')
+                to_send = 'SIP/2.0 401 Unauthorized\r\n\r\n'
+                self.wfile.write(bytes(to_send, 'utf-8'))
+                event2log(to_send, ip, port, 's')
             elif not user_found:
-                self.wfile.write(b'SIP/2.0 404 User Not Found\r\n\r\n')
+                to_send = 'SIP/2.0 404 User Not Found\r\n\r\n'
+                self.wfile.write(bytes(to_send, 'utf-8'))
+                event2log(to_send, ip, port, 's')
         elif line[0] == 'ACK':
             registered = self.register_check(self.user[0])
+            event2log(literal, ip, port, 'r')
             if registered:
+                ip_sock = self.clients[self.dest[0]][0]
+                port_sock = int(self.clients[self.dest[0]][1])
                 with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) \
                 as my_socket:  # Abrimos un socket con el cliente solicitado
-                    my_socket.connect((self.clients[self.dest[0]][0],
-                                       int(self.clients[self.dest[0]][1])))
-                    my_socket.send(bytes(' '.join(line), 'utf-8'))
+                    my_socket.connect((ip_sock, port_sock))
+                    my_socket.send(bytes(literal, 'utf-8'))
+                    event2log(literal, ip_sock, port_sock, 's')
                 self.user = []
                 self.dest = []
-                print(self.user, self.dest)
         elif line[0] == 'BYE':
             dest = line[1][4:]
             user_found = self.register_check(dest)
+            event2log(literal, ip, port, 'r')
             if user_found:
+                ip_sock = self.clients[self.dest[0]][0]
+                port_sock = int(self.clients[self.dest[0]][1])
                 with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) \
                 as my_socket:  # Abrimos un socket con el cliente solicitado
-                    my_socket.connect((self.clients[dest][0],
-                                       int(self.clients[dest][1])))
-                    my_socket.send(bytes(' '.join(line), 'utf-8'))
+                    my_socket.connect((ip_sock, port_sock))
+                    my_socket.send(bytes(literal, 'utf-8'))
+                    event2log(literal, ip_sock, port_sock, 's')
                     answer = my_socket.recv(1024).decode('utf-8')
+                    event2log(answer, ip_sock, port_sock, 'r')
                     self.wfile.write(bytes(answer, 'utf-8'))
+                    event2log(answer, ip, port, 's')
+            elif not user_found:
+                to_send = 'SIP/2.0 404 User Not Found\r\n\r\n'
+                self.wfile.write(bytes(to_send, 'utf-8'))
+                event2log(to_send, ip, port, 's')
+        elif line[0] not in ['INVITE', 'ACK', 'BYE']:
+            to_send = 'SIP/2.0 405 Method Not Allowed\r\n\r\n'
+            self.wfile.write(bytes(to_send, 'utf-8'))
+            event2log(to_send, ip, port, 's')
+        else:
+            to_send = 'SIP/2.0 400 Bad Request\r\n\r\n'
+            self.wfile.write(bytes(to_send, 'utf-8'))
+            event2log(to_send, ip, port, 's')
 if __name__ == "__main__":
     try:
         CONFIG = sys.argv[1]
@@ -221,3 +248,7 @@ if __name__ == "__main__":
         serv.serve_forever()
     except KeyboardInterrupt:
         print("\nFinalizado servidor")
+        now = time.strftime('%Y%m%d%H%M%S ', time.localtime(time.time()))
+        log_file = open(config_data['log']['path'], 'a')
+        log_file.write(now + 'Finishing...\n')
+        log_file.close() 
