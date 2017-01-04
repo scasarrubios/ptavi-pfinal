@@ -7,6 +7,7 @@ Programa servidor proxy SIP-SDP
 import socketserver
 import socket
 import sys
+import os
 import time
 import json
 import hashlib
@@ -36,6 +37,21 @@ class ProxyXmlHandler(ContentHandler):
     def get_tags(self):
         return self.tags
 
+def event2log(event, ip, port, flag):
+    now = time.strftime('%Y%m%d%H%M%S ', time.localtime(time.time()))
+    if not os.path.isfile(config_data['log']['path']):
+        log_file = open(config_data['log']['path'], 'a')
+        log_file.write(now + 'Starting...\n')
+        log_file.close()
+    log_file = open(config_data['log']['path'], 'a')
+    if flag == 'r':
+        flag = 'Received from '
+    elif flag == 's':
+        flag = 'Sent to '
+    event = event.replace('\r\n', ' ')
+    event = event.replace('\r\n ', ' ')
+    log_file.write(now + flag + ip + ':' + str(port) + ': ' + event + '\n')
+    log_file.close()
 
 class ProxyHandler(socketserver.DatagramRequestHandler):
     """
@@ -115,10 +131,14 @@ class ProxyHandler(socketserver.DatagramRequestHandler):
         self.caducity_check()
         self.register2json()
         if line[0] == 'REGISTER' and len(line) < 6:  # Si falta autenticación
+            ip = self.client_address[0]
+            port = self.client_address[1]
             to_send = 'SIP/2.0 401 Unauthorized\r\n' + \
                       'WWW Authenticate: Digest nonce="' + \
                       self.nonce + '"\r\n\r\n'
             self.wfile.write(bytes(to_send, 'utf-8'))
+            event2log(literal, ip, port, 'r')
+            event2log(to_send, ip, port, 's')
         elif line[0] == 'REGISTER' and len(line) >= 6:  # Autenticación recibida
             user = line[1].split(':')[1]
             authenticate = hashlib.sha1()
@@ -127,6 +147,8 @@ class ProxyHandler(socketserver.DatagramRequestHandler):
             authenticate = authenticate.hexdigest()
             if authenticate == line[7].split('"')[1]:
                 print("PERFE")
+                ip = self.client_address[0]
+                port = self.client_address[1]
                 data = []
                 data.append(self.client_address[0])  # Añade la IP
                 data.append(line[1].split(':')[2])  # Añade el puerto
@@ -137,6 +159,7 @@ class ProxyHandler(socketserver.DatagramRequestHandler):
                     data.append(time.strftime('%Y-%m-%d %H:%M:%S', caduc_time))
                     self.clients[user] = data
                 self.wfile.write(b"SIP/2.0 200 OK\r\n\r\n")
+                event2log(literal, ip, port, 'r')
                 self.register2json()
                 print('SEGUNDA')
                 print(self.clients)
