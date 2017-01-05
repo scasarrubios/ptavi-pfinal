@@ -37,6 +37,7 @@ class ProxyXmlHandler(ContentHandler):
     def get_tags(self):
         return self.tags
 
+
 def event2log(event, ip, port, flag):
     now = time.strftime('%Y%m%d%H%M%S ', time.localtime(time.time()))
     log_file = open(config_data['log']['path'], 'a')
@@ -52,14 +53,15 @@ def event2log(event, ip, port, flag):
     else:
         log_file.write(now + event + '\n')
         log_file.close()
-    
+
+
 class ProxyHandler(socketserver.DatagramRequestHandler):
     """
     Register server class
     """
     clients = {}
-    user = []
-    dest = []
+    user = ['user']
+    dest = ['dest']
     no_file = False
     nonce = str(random.randint(000000000000000000000,
                                99999999999999999999))
@@ -71,12 +73,13 @@ class ProxyHandler(socketserver.DatagramRequestHandler):
         """
         caduced = []
         for client in self.clients:
-            now = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
+            now = time.strftime('%Y-%m-%d %H:%M:%S',
+                                time.localtime(time.time()))
             if now >= self.clients[client][2]:
                 caduced.append(client)
         for client in caduced:
             del self.clients[client]
-    
+
     def get_psswd(self, user):
         try:
             file = open(str(config_data['database']['passwdpath']), "r")
@@ -121,6 +124,27 @@ class ProxyHandler(socketserver.DatagramRequestHandler):
         except:
             self.no_file = True
 
+    def sendandresend(self, msg, ip, port, ack):
+        ip_sock = self.clients[self.dest[0]][0]
+        port_sock = int(self.clients[self.dest[0]][1])
+        my_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            my_socket.connect((ip_sock, port_sock))
+            my_socket.send(bytes(msg, 'utf-8'))
+            event2log(msg, ip_sock, port_sock, 's')
+            if not ack:
+                answer = my_socket.recv(1024).decode('utf-8')
+                event2log(answer, ip_sock, port_sock, 'r')
+            else:
+                answer = ''
+        except ConnectionRefusedError:
+            event = 'Error: No server listening at ' + ip_sock + ' port ' \
+                    + str(port_sock)
+            event2log(event, ip, port, 'f')
+            print(event)
+            answer = 'SIP/2.0 504 Server Time-out\r\n\r\n'
+        return answer
+
     def handle(self):
         self.json2register()
         literal = self.rfile.read().decode('utf-8')
@@ -139,7 +163,7 @@ class ProxyHandler(socketserver.DatagramRequestHandler):
             self.wfile.write(bytes(to_send, 'utf-8'))
             event2log(literal, ip, port, 'r')
             event2log(to_send, ip, port, 's')
-        elif line[0] == 'REGISTER' and len(line) >= 6:  # Autenticación recibida
+        elif line[0] == 'REGISTER' and len(line) >= 6:  # Con autenticación
             user = line[1].split(':')[1]
             authenticate = hashlib.sha1()
             authenticate.update(bytes(self.get_psswd(user), 'utf-8'))
@@ -164,23 +188,15 @@ class ProxyHandler(socketserver.DatagramRequestHandler):
                 print('SEGUNDA')
                 print(self.clients)
         elif line[0] == 'INVITE':
-            self.user.append(line[6][2:])
-            self.dest.append(line[1].split(':')[1])
+            self.user[0] = (line[6][2:])
+            self.dest[0] = (line[1].split(':')[1])
             registered = self.register_check(self.user[0])
             user_found = self.register_check(self.dest[0])
             event2log(literal, ip, port, 'r')
             if registered and user_found:
-                ip_sock = self.clients[self.dest[0]][0]
-                port_sock = int(self.clients[self.dest[0]][1])
-                with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) \
-                as my_socket:  # Abrimos un socket con el cliente solicitado
-                    my_socket.connect((ip_sock, port_sock))
-                    my_socket.send(bytes(literal, 'utf-8'))
-                    event2log(literal, ip_sock, port_sock, 's')
-                    answer = my_socket.recv(1024).decode('utf-8')
-                    event2log(answer, ip_sock, port_sock, 'r')
-                    self.wfile.write(bytes(answer, 'utf-8'))
-                    event2log(answer, ip, port, 's')
+                answer = self.sendandresend(literal, ip, port, False)
+                self.wfile.write(bytes(answer, 'utf-8'))
+                event2log(answer, ip, port, 's')
             elif not registered:
                 to_send = 'SIP/2.0 401 Unauthorized\r\n\r\n'
                 self.wfile.write(bytes(to_send, 'utf-8'))
@@ -193,31 +209,18 @@ class ProxyHandler(socketserver.DatagramRequestHandler):
             registered = self.register_check(self.user[0])
             event2log(literal, ip, port, 'r')
             if registered:
-                ip_sock = self.clients[self.dest[0]][0]
-                port_sock = int(self.clients[self.dest[0]][1])
-                with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) \
-                as my_socket:  # Abrimos un socket con el cliente solicitado
-                    my_socket.connect((ip_sock, port_sock))
-                    my_socket.send(bytes(literal, 'utf-8'))
-                    event2log(literal, ip_sock, port_sock, 's')
+                answer = self.sendandresend(literal, ip, port, True)
                 self.user = []
                 self.dest = []
         elif line[0] == 'BYE':
-            dest = line[1][4:]
-            user_found = self.register_check(dest)
+            self.dest[0] = line[1][4:]
+            print(self.dest[0])
+            user_found = self.register_check(self.dest[0])
             event2log(literal, ip, port, 'r')
             if user_found:
-                ip_sock = self.clients[self.dest[0]][0]
-                port_sock = int(self.clients[self.dest[0]][1])
-                with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) \
-                as my_socket:  # Abrimos un socket con el cliente solicitado
-                    my_socket.connect((ip_sock, port_sock))
-                    my_socket.send(bytes(literal, 'utf-8'))
-                    event2log(literal, ip_sock, port_sock, 's')
-                    answer = my_socket.recv(1024).decode('utf-8')
-                    event2log(answer, ip_sock, port_sock, 'r')
-                    self.wfile.write(bytes(answer, 'utf-8'))
-                    event2log(answer, ip, port, 's')
+                answer = self.sendandresend(literal, ip, port, False)
+                self.wfile.write(bytes(answer, 'utf-8'))
+                event2log(answer, ip, port, 's')
             elif not user_found:
                 to_send = 'SIP/2.0 404 User Not Found\r\n\r\n'
                 self.wfile.write(bytes(to_send, 'utf-8'))
@@ -235,7 +238,7 @@ if __name__ == "__main__":
         CONFIG = sys.argv[1]
     except:
         sys.exit("Usage: python3 proxy_registrar.py config")
-     
+
     parser = make_parser()
     pxHandler = ProxyXmlHandler()
     parser.setContentHandler(pxHandler)
@@ -249,4 +252,4 @@ if __name__ == "__main__":
         serv.serve_forever()
     except KeyboardInterrupt:
         print("\nFinalizado servidor")
-        event2log('Finishing...', '1', '1', 'f') 
+        event2log('Finishing...', '1', '1', 'f')

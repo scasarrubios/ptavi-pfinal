@@ -34,7 +34,7 @@ class XmlHandler(ContentHandler):
 
     def get_tags(self):
         return self.tags
-        
+
 
 def event2log(event, ip, port, flag):
     now = time.strftime('%Y%m%d%H%M%S ', time.localtime(time.time()))
@@ -66,8 +66,8 @@ class SIPServerHandler(socketserver.DatagramRequestHandler):
         print('>>Recibido:\n' + literal)
         if line[0] == 'INVITE':
             self.rtp_data.append(line[6][2:])
-            self.rtp_data.append(line[7])  # Guardamos la info de RTP para el envío
-            self.rtp_data.append(line[11])
+            self.rtp_data.append(line[7])  # Guardamos la info de RTP
+            self.rtp_data.append(line[11])  # para el envío
             templateSIP = ('SIP/2.0 100 Trying\r\n\r\n'
                            'SIP/2.0 180 Ring\r\n\r\n'
                            'SIP/2.0 200 OK\r\n\r\n')
@@ -83,7 +83,7 @@ class SIPServerHandler(socketserver.DatagramRequestHandler):
             os.system("./mp32rtp -i " + self.rtp_data[1] + " -p " +
                       self.rtp_data[2] + " < " +
                       config_data['audio']['path'])
-            event2log(config_data['audio']['path'], self.rtp_data[1], \
+            event2log(config_data['audio']['path'], self.rtp_data[1],
                       self.rtp_data[2], 's')
             cmd = 'cvlc rtp://@' + config_data['uaserver']['ip'] + \
                   ':' + config_data['rtpaudio']['puerto']
@@ -115,7 +115,8 @@ if __name__ == "__main__":
     parser.setContentHandler(xHandler)
     parser.parse(open(CONFIG))
     config_data = xHandler.get_tags()
-    serv = socketserver.UDPServer(('', int(config_data['uaserver']['puerto'])), SIPServerHandler)
+    port = int(config_data['uaserver']['puerto'])
+    serv = socketserver.UDPServer(('', port), SIPServerHandler)
     event2log('Starting UAServer...', '1', 1, 'f')
     print("Listening...\n")
     try:
