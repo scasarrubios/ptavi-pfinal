@@ -8,6 +8,7 @@ import socketserver
 import socket
 import sys
 import os
+import time
 from xml.sax import make_parser
 from xml.sax.handler import ContentHandler
 
@@ -33,6 +34,23 @@ class XmlHandler(ContentHandler):
 
     def get_tags(self):
         return self.tags
+        
+
+def event2log(event, ip, port, flag):
+    now = time.strftime('%Y%m%d%H%M%S ', time.localtime(time.time()))
+    log_file = open(config_data['log']['path'], 'a')
+    if flag == 'r':
+        flag = 'Received from '
+    elif flag == 's':
+        flag = 'Sent to '
+    if flag == 'Received from ' or flag == 'Sent to ':
+        event = event.replace('\r\n', ' ')
+        event = event.replace('\r\n ', ' ')
+        log_file.write(now + flag + ip + ':' + str(port) + ': ' + event + '\n')
+        log_file.close()
+    else:
+        log_file.write(now + event + '\n')
+        log_file.close()
 
 
 class SIPServerHandler(socketserver.DatagramRequestHandler):
@@ -40,13 +58,16 @@ class SIPServerHandler(socketserver.DatagramRequestHandler):
     rtp_data = []
 
     def handle(self):
-        line = self.rfile.read().decode('utf-8').split()
+        literal = self.rfile.read().decode('utf-8')
+        line = literal.split()
+        ip = self.client_address[0]
+        port = self.client_address[1]
+        event2log(literal, ip, port, 'r')
+        print('>>Recibido:\n' + literal)
         if line[0] == 'INVITE':
-            print('llegaaaaa:', line)
             self.rtp_data.append(line[6][2:])
-            self.rtp_data.append(line[7])
+            self.rtp_data.append(line[7])  # Guardamos la info de RTP para el envío
             self.rtp_data.append(line[11])
-            print(self.rtp_data)
             templateSIP = ('SIP/2.0 100 Trying\r\n\r\n'
                            'SIP/2.0 180 Ring\r\n\r\n'
                            'SIP/2.0 200 OK\r\n\r\n')
@@ -56,19 +77,31 @@ class SIPServerHandler(socketserver.DatagramRequestHandler):
                 "\r\ns=LaMesa\r\n" + "t=0\r\nm=audio " + \
                 str(config_data['rtpaudio']['puerto']) + " RTP\r\n\r\n"
             self.wfile.write(bytes(templateSIP + templateSDP, 'utf-8'))
+            event2log(templateSIP + templateSDP, ip, port, 's')
         elif line[0] == 'ACK':
-            print('ack:', line)
+            event2log(literal, ip, port, 'r')
             os.system("./mp32rtp -i " + self.rtp_data[1] + " -p " +
                       self.rtp_data[2] + " < " +
                       config_data['audio']['path'])
+            event2log(config_data['audio']['path'], self.rtp_data[1], \
+                      self.rtp_data[2], 's')
+            cmd = 'cvlc rtp://@' + config_data['uaserver']['ip'] + \
+                  ':' + config_data['rtpaudio']['puerto']
+            os.system(cmd)
+            event2log('audio', self.rtp_data[1], self.rtp_data[2], 'r')
             self.rtp_data = []
-            print('check vacio:', self.rtp_data)
         elif line[0] == 'BYE':
-            self.wfile.write(b'SIP/2.0 200 OK\r\n\r\n')
+            to_send = 'SIP/2.0 200 OK\r\n\r\n'
+            self.wfile.write(bytes(to_send, 'utf-8'))
+            event2log(to_send, ip, port, 's')
         elif line[0] not in ['INVITE', 'ACK', 'BYE']:
-            self.wfile.write(b'SIP/2.0 405 Method Not Allowed\r\n\r\n')
+            to_send = 'SIP/2.0 405 Method Not Allowed\r\n\r\n'
+            self.wfile.write(bytes(to_send, 'utf-8'))
+            event2log(to_send, ip, port, 's')
         else:
-            self.wfile.write(b"SIP/2.0 400 Bad Request\r\n\r\n")
+            to_send = 'SIP/2.0 400 Bad Request\r\n\r\n'
+            self.wfile.write(bytes(to_send, 'utf-8'))
+            event2log(to_send, ip, port, 's')
 
 if __name__ == "__main__":
 
@@ -83,8 +116,10 @@ if __name__ == "__main__":
     parser.parse(open(CONFIG))
     config_data = xHandler.get_tags()
     serv = socketserver.UDPServer(('', int(config_data['uaserver']['puerto'])), SIPServerHandler)
+    event2log('Starting UAServer...', '1', 1, 'f')
     print("Listening...\n")
     try:
         serv.serve_forever()
     except KeyboardInterrupt:
         print("\nFinalizado servidor")
+        event2log('Finishing UAServer...', '1', 1, 'f')

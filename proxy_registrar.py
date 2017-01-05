@@ -39,20 +39,20 @@ class ProxyXmlHandler(ContentHandler):
 
 def event2log(event, ip, port, flag):
     now = time.strftime('%Y%m%d%H%M%S ', time.localtime(time.time()))
-    if not os.path.isfile(config_data['log']['path']):
-        log_file = open(config_data['log']['path'], 'a')
-        log_file.write(now + 'Starting...\n')
-        log_file.close()
     log_file = open(config_data['log']['path'], 'a')
     if flag == 'r':
         flag = 'Received from '
     elif flag == 's':
         flag = 'Sent to '
-    event = event.replace('\r\n', ' ')
-    event = event.replace('\r\n ', ' ')
-    log_file.write(now + flag + ip + ':' + str(port) + ': ' + event + '\n')
-    log_file.close()
-
+    if flag == 'Received from ' or flag == 'Sent to ':
+        event = event.replace('\r\n', ' ')
+        event = event.replace('\r\n ', ' ')
+        log_file.write(now + flag + ip + ':' + str(port) + ': ' + event + '\n')
+        log_file.close()
+    else:
+        log_file.write(now + event + '\n')
+        log_file.close()
+    
 class ProxyHandler(socketserver.DatagramRequestHandler):
     """
     Register server class
@@ -235,7 +235,7 @@ if __name__ == "__main__":
         CONFIG = sys.argv[1]
     except:
         sys.exit("Usage: python3 proxy_registrar.py config")
-
+     
     parser = make_parser()
     pxHandler = ProxyXmlHandler()
     parser.setContentHandler(pxHandler)
@@ -244,11 +244,9 @@ if __name__ == "__main__":
     serv = socketserver.UDPServer(('', int(config_data['server']['puerto'])),
                                   ProxyHandler)
     print('>> ' + config_data['server']['name'] + ' listening...\n')
+    event2log('Starting...', '1', '1', 'f')
     try:
         serv.serve_forever()
     except KeyboardInterrupt:
         print("\nFinalizado servidor")
-        now = time.strftime('%Y%m%d%H%M%S ', time.localtime(time.time()))
-        log_file = open(config_data['log']['path'], 'a')
-        log_file.write(now + 'Finishing...\n')
-        log_file.close() 
+        event2log('Finishing...', '1', '1', 'f') 

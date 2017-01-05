@@ -12,6 +12,22 @@ import os
 from uaserver import XmlHandler
 from xml.sax import make_parser
 
+def event2log(event, ip, port, flag):
+    now = time.strftime('%Y%m%d%H%M%S ', time.localtime(time.time()))
+    log_file = open(config_data['log']['path'], 'a')
+    if flag == 'r':
+        flag = 'Received from '
+    elif flag == 's':
+        flag = 'Sent to '
+    if flag == 'Received from ' or flag == 'Sent to ':
+        event = event.replace('\r\n', ' ')
+        event = event.replace('\r\n ', ' ')
+        log_file.write(now + flag + ip + ':' + str(port) + ': ' + event + '\n')
+        log_file.close()
+    else:
+        log_file.write(now + event + '\n')
+        log_file.close()
+
 if __name__ == "__main__":
 
     try:
@@ -30,15 +46,24 @@ if __name__ == "__main__":
     # Creamos el socket, lo configuramos y lo atamos a un servidor/puerto
     my_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     #my_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    my_socket.connect((config_data['regproxy']['ip'],
-                       int(config_data['regproxy']['puerto'])))
+    ip = config_data['regproxy']['ip']
+    port = int(config_data['regproxy']['puerto'])
+    try:
+        my_socket.connect((ip, port))
+        event2log('Opening socket...', ip, port, 'f')
+    except ConnectionRefusedError:
+        event = 'Error: No server listening at ' + ip + 'port ' + port
+        sys.exit(event)
+        event2log(event, ip, port, 'f')
     if METHOD == 'REGISTER':
         line = METHOD + ' sip:' + str(config_data['account']['username']) + \
             ':' + str(config_data['uaserver']['puerto']) + \
-            ' SIP/2.0\r\n Expires: ' + OPTION
-        print("Enviando: " + line)
+            ' SIP/2.0\r\nExpires: ' + OPTION
+        print(">>Enviando:\n" + line)
         my_socket.send(bytes(line, 'utf-8') + b'\r\n\r\n')
+        event2log(line, ip, port, 's')
         answer = my_socket.recv(1024).decode('utf-8')
+        event2log(answer, ip, port, 'r')
 
         # Realizamos la autenticación
         if answer.split()[1] == '401':
@@ -49,9 +74,11 @@ if __name__ == "__main__":
             response = response.hexdigest()
             authorization = 'Authorization: Digest response="' + response
             line += '\r\n' + authorization
-            my_socket.send(bytes(line, 'utf-8') + b'\r\n\r\n')
+            my_socket.send(bytes(line, 'utf-8') + b'"\r\n\r\n')
+            event2log(line, ip, port, 's')
             answer = my_socket.recv(1024).decode('utf-8')
-
+            event2log(answer, ip, port, 'r')
+            print('>>Recibido:\n' + answer)
     elif METHOD == 'INVITE':
         templateSDP = "Content-Type: application/sdp\r\n\r\n" + "v=0\r\n" \
                     + "o=" + str(config_data['account']['username']) + \
@@ -59,19 +86,38 @@ if __name__ == "__main__":
                     "\r\ns=LaMesa\r\n" + "t=0\r\nm=audio " + \
                     str(config_data['rtpaudio']['puerto']) + " RTP\r\n\r\n"
         line = METHOD + ' sip:' + OPTION + ' SIP/2.0\r\n' + templateSDP
-        print('LINEAINVITE:\n', line)
+        print('>>Enviando:\n', line)
         my_socket.send(bytes(line, 'utf-8'))
+        event2log(line, ip, port, 's')
         answer = my_socket.recv(1024).decode('utf-8')
+        event2log(answer, ip, port, 'r')
+        print('>>Recibido:\n' + answer)
+        sliced = answer.split()
+        
+        print(sliced)
         if '200' in answer:
+            rtp_ip = sliced[13]
+            rtp_port = sliced[17]
             line = 'ACK sip:' + OPTION + ' SIP/2.0\r\n'
             my_socket.send(bytes(line, 'utf-8'))
-            os.system('cvlc rtp://@' + config_data['uaserver']['ip'] +
-                     ':' + config_data['rtpaudio']['puerto'])
-        else:
-            print(answer)
+            event2log(line, ip, port, 's')
+            cmd = 'cvlc rtp://@' + config_data['uaserver']['ip'] + \
+                  ':' + config_data['rtpaudio']['puerto']
+            os.system(cmd)
+            event2log('audio', rtp_ip, rtp_port, 'r')
+            os.system("./mp32rtp -i " + rtp_ip + " -p " +
+                      rtp_port + " < " +
+                      config_data['audio']['path'])
+            event2log(config_data['audio']['path'], rtp_ip, \
+                      rtp_port, 's')
     elif METHOD == 'BYE':
         line = 'BYE sip:' + OPTION + ' SIP/2.0\r\n'
+        print("Enviando:\n" + line)
         my_socket.send(bytes(line, 'utf-8'))
+        event2log(line, ip, port, 's')
         answer = my_socket.recv(1024).decode('utf-8')
-        print(answer)
+        event2log(answer, ip, port, 'r')
+        print('>>Recibido:\n' + answer)
     print("Cerrando socket")
+    event2log('Closing socket...', ip, port, 'f')
+    my_socket.close()
