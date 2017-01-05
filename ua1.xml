@@ -4,6 +4,6 @@
     <uaserver ip="127.0.0.1" puerto="1234" />  
     <rtpaudio puerto="7777" /> 
     <regproxy ip="127.0.0.1" puerto="5555" />
-    <log path="/ptavi/ptavi-pfinal/logs" />
-    <audio path="/ptavi/ptavi-pfinal/cancion.mp3" />
+    <log path="/home/scasarrubios/ptavi/ptavi-pfinal/log_jax.txt" />
+    <audio path="/home/scasarrubios/ptavi/ptavi-pfinal/cancion.mp3" />
 </config>
