@@ -39,6 +39,7 @@ class ProxyXmlHandler(ContentHandler):
 
 
 def event2log(event, ip, port, flag):
+
     now = time.strftime('%Y%m%d%H%M%S ', time.localtime(time.time()))
     log_file = open(config_data['log']['path'], 'a')
     if flag == 'r':
@@ -81,6 +82,7 @@ class ProxyHandler(socketserver.DatagramRequestHandler):
             del self.clients[client]
 
     def get_psswd(self, user):
+
         try:
             file = open(str(config_data['database']['passwdpath']), "r")
             lines = file.readlines()
@@ -124,7 +126,8 @@ class ProxyHandler(socketserver.DatagramRequestHandler):
         except:
             self.no_file = True
 
-    def sendandresend(self, msg, ip, port, ack):
+    def send2uaserver(self, msg, ip, port, ack):
+
         ip_sock = self.clients[self.dest[0]][0]
         port_sock = int(self.clients[self.dest[0]][1])
         my_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -132,6 +135,7 @@ class ProxyHandler(socketserver.DatagramRequestHandler):
             my_socket.connect((ip_sock, port_sock))
             my_socket.send(bytes(msg, 'utf-8'))
             event2log(msg, ip_sock, port_sock, 's')
+            print('>>Enviando:\n' + msg)
             if not ack:
                 answer = my_socket.recv(1024).decode('utf-8')
                 event2log(answer, ip_sock, port_sock, 'r')
@@ -146,14 +150,14 @@ class ProxyHandler(socketserver.DatagramRequestHandler):
         return answer
 
     def handle(self):
+
         self.json2register()
         literal = self.rfile.read().decode('utf-8')
         line = literal.split()
-        print(line)
-        print('PRIMERA')
-        print(self.clients)
+        print('>>Recibido:\n' + literal)
         ip = self.client_address[0]
         port = self.client_address[1]
+        event2log(literal, ip, port, 'r')
         self.caducity_check()
         self.register2json()
         if line[0] == 'REGISTER' and len(line) < 6:  # Si falta autenticación
@@ -161,8 +165,8 @@ class ProxyHandler(socketserver.DatagramRequestHandler):
                       'WWW Authenticate: Digest nonce="' + \
                       self.nonce + '"\r\n\r\n'
             self.wfile.write(bytes(to_send, 'utf-8'))
-            event2log(literal, ip, port, 'r')
             event2log(to_send, ip, port, 's')
+            print('>>Enviando:\n' + to_send)
         elif line[0] == 'REGISTER' and len(line) >= 6:  # Con autenticación
             user = line[1].split(':')[1]
             authenticate = hashlib.sha1()
@@ -170,7 +174,6 @@ class ProxyHandler(socketserver.DatagramRequestHandler):
             authenticate.update(bytes(self.nonce, 'utf-8'))
             authenticate = authenticate.hexdigest()
             if authenticate == line[7].split('"')[1]:
-                print("PERFE")
                 data = []
                 data.append(self.client_address[0])  # Añade la IP
                 data.append(line[1].split(':')[2])  # Añade el puerto
@@ -182,58 +185,61 @@ class ProxyHandler(socketserver.DatagramRequestHandler):
                     self.clients[user] = data
                 to_send = "SIP/2.0 200 OK\r\n\r\n"
                 self.wfile.write(bytes(to_send, 'utf-8'))
-                event2log(literal, ip, port, 'r')
                 event2log(to_send, ip, port, 's')
                 self.register2json()
-                print('SEGUNDA')
-                print(self.clients)
+                print('>>Enviando:\n' + to_send)
         elif line[0] == 'INVITE':
             self.user[0] = (line[6][2:])
             self.dest[0] = (line[1].split(':')[1])
             registered = self.register_check(self.user[0])
             user_found = self.register_check(self.dest[0])
-            event2log(literal, ip, port, 'r')
             if registered and user_found:
-                answer = self.sendandresend(literal, ip, port, False)
+                answer = self.send2uaserver(literal, ip, port, False)
                 self.wfile.write(bytes(answer, 'utf-8'))
                 event2log(answer, ip, port, 's')
+                print('>>Reenviando:\n' + answer)
             elif not registered:
                 to_send = 'SIP/2.0 401 Unauthorized\r\n\r\n'
                 self.wfile.write(bytes(to_send, 'utf-8'))
                 event2log(to_send, ip, port, 's')
+                print('>>Enviando:\n' + to_send)
             elif not user_found:
                 to_send = 'SIP/2.0 404 User Not Found\r\n\r\n'
                 self.wfile.write(bytes(to_send, 'utf-8'))
                 event2log(to_send, ip, port, 's')
+                print('>>Enviando:\n' + to_send)
         elif line[0] == 'ACK':
             registered = self.register_check(self.user[0])
-            event2log(literal, ip, port, 'r')
             if registered:
-                answer = self.sendandresend(literal, ip, port, True)
+                answer = self.send2uaserver(literal, ip, port, True)
                 self.user = []
                 self.dest = []
         elif line[0] == 'BYE':
             self.dest[0] = line[1][4:]
-            print(self.dest[0])
             user_found = self.register_check(self.dest[0])
-            event2log(literal, ip, port, 'r')
             if user_found:
-                answer = self.sendandresend(literal, ip, port, False)
+                answer = self.send2uaserver(literal, ip, port, False)
                 self.wfile.write(bytes(answer, 'utf-8'))
                 event2log(answer, ip, port, 's')
+                print('>>Reenviando:\n' + answer)
             elif not user_found:
                 to_send = 'SIP/2.0 404 User Not Found\r\n\r\n'
                 self.wfile.write(bytes(to_send, 'utf-8'))
                 event2log(to_send, ip, port, 's')
+                print('>>Enviando:\n' + to_send)
         elif line[0] not in ['INVITE', 'ACK', 'BYE']:
             to_send = 'SIP/2.0 405 Method Not Allowed\r\n\r\n'
             self.wfile.write(bytes(to_send, 'utf-8'))
             event2log(to_send, ip, port, 's')
+            print('>>Enviando:\n' + to_send)
         else:
             to_send = 'SIP/2.0 400 Bad Request\r\n\r\n'
             self.wfile.write(bytes(to_send, 'utf-8'))
             event2log(to_send, ip, port, 's')
+            print('>>Enviando:\n' + to_send)
+
 if __name__ == "__main__":
+
     try:
         CONFIG = sys.argv[1]
     except:
