@@ -174,10 +174,11 @@ class ProxyHandler(socketserver.DatagramRequestHandler):
             authenticate.update(bytes(self.nonce, 'utf-8'))
             authenticate = authenticate.hexdigest()
             if authenticate == line[7].split('"')[1]:
+                registered = self.register_check(user)
                 data = []
                 data.append(self.client_address[0])  # Añade la IP
                 data.append(line[1].split(':')[2])  # Añade el puerto
-                if line[3] == 'Expires:' and line[4] == '0':
+                if line[3] == 'Expires:' and line[4] == '0' and registered:
                     del self.clients[user]
                 elif line[3] == 'Expires:' and line[4] != '0':
                     caduc_time = time.localtime(time.time()+int(line[4]))
@@ -237,7 +238,6 @@ class ProxyHandler(socketserver.DatagramRequestHandler):
             self.wfile.write(bytes(to_send, 'utf-8'))
             event2log(to_send, ip, port, 's')
             print('>>Enviando:\n' + to_send)
-
 if __name__ == "__main__":
 
     try:
