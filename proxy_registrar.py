@@ -63,7 +63,6 @@ class ProxyHandler(socketserver.DatagramRequestHandler):
     clients = {}
     user = ['user']
     dest = ['dest']
-    no_file = False
     nonce = str(random.randint(000000000000000000000,
                                99999999999999999999))
 
@@ -109,22 +108,16 @@ class ProxyHandler(socketserver.DatagramRequestHandler):
         """
         Imprime el diccionario de clientes en un fichero json
         """
-        if self.no_file:
-            fichero = open(str(config_data['database']['path']), 'w')
-        else:
-            fichero = open(str(config_data['database']['path']), 'r+')
+        fichero = open(str(config_data['database']['path']), 'w')
         json.dump(self.clients, fichero, indent='\t')
 
     def json2register(self):
         """
-        Comprueba si hay un fichero de json y si lo hay importa los clientes,
-        si no cambia el valor de no_file a True
+        Comprueba si hay un fichero de json y si lo hay importa los clientes
         """
-        try:
+        if os.path.isfile(str(config_data['database']['path'])):
             with open(str(config_data['database']['path'])) as data_file:
                 self.clients = json.load(data_file)
-        except:
-            self.no_file = True
 
     def send2uaserver(self, msg, ip, port, ack):
 
